@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: IdolSwap
 ## Notes: Auto-swaps Druid Idols per spell (Turtle WoW 1.12)
-## Author: Theo & ChatGPT
+## Author: Theo
 ## Version: 1.0
 IdolSwap.lua
