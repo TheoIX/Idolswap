@@ -80,7 +80,8 @@ local IdolMap = {
     ["Swipe"]              = "Idol of Brutality",
     ["Shred"]              = "Idol of the Moonfang",
     ["Savage Bite"]        = "Idol of the Moonfang",
-
+    ["Ferocious Bite"]     = "Idol of the Emerald Rot",
+    
     -- Forms
     ["Aquatic Form"]       = "Idol of Fluidity",
     ["Travel Form"]        = "Idol of the Wildshifter",
