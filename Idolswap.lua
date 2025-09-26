@@ -9,6 +9,17 @@
 --  • Spell→Idol map (IdolMap) below reflects Druid spells/forms.
 --  • Slash command is /idolswap.
 --
+-- Added:
+--  • /idolever  → Macro snap-back mode. Whenever you switch AWAY from
+--                 "Idol of Evergrowth", waits 0.2s then runs:
+--                 /equip Idol of Evergrowth
+--                 (independent of the normal swap logic)
+--                 
+--  One-shot timer only: the snap-back timer is scheduled once per transition
+--  away from Evergrowth, and cannot be re-scheduled until it fires or is
+--  cleared. This prevents duplicate timers and reduces hitching.
+-- ================================================================
+
 -- =====================
 -- Locals / Aliases
 -- =====================
@@ -96,6 +107,10 @@ local WatchedNames = {}
 for _, idolName in pairs(IdolMap) do
     WatchedNames[idolName] = true
 end
+
+-- Add Evergrowth explicitly in case you remove it from the map later
+local EVERGROWTH_NAME = "Idol of Evergrowth"
+WatchedNames[EVERGROWTH_NAME] = true
 
 -- Extract numeric itemID from an item link (1.12 safe)
 local function ItemIDFromLink(link)
@@ -313,7 +328,57 @@ function CastSpell(spellIndex, bookType)
 end
 
 -- =====================
--- Slash Command
+-- Evergrowth Macro Snap-back (/idolever)
+-- =====================
+local IdolEvergrowthMacroEnabled = false
+local lastRelicName = nil
+local pendingEvergrowthEquipAt = nil
+
+-- Get plain name from relic slot link
+local function GetEquippedRelicName()
+    local link = GetInventoryItemLink("player", RELIC_SLOT)
+    if not link then return nil end
+    local _,_, name = string.find(link, "%[(.-)%]")
+    return name
+end
+
+-- OnUpdate driver for macro snap-back (independent of normal swaps)
+IdolSwapFrame:SetScript("OnUpdate", function(_, elapsed)
+    local now = GetTime()
+
+    if IdolEvergrowthMacroEnabled then
+        local currentName = GetEquippedRelicName()
+
+        -- One-shot schedule: only schedule if there is no pending timer yet
+        -- and we just transitioned away from Evergrowth this frame.
+        if (not pendingEvergrowthEquipAt)
+           and (lastRelicName == EVERGROWTH_NAME)
+           and (currentName and currentName ~= EVERGROWTH_NAME) then
+            pendingEvergrowthEquipAt = now + 0.2
+        end
+
+        -- Fire the macro when due (then clear so it cannot refire)
+        if pendingEvergrowthEquipAt and now >= pendingEvergrowthEquipAt then
+            pendingEvergrowthEquipAt = nil
+            if RunMacroText then
+                RunMacroText("/equip " .. EVERGROWTH_NAME)
+            else
+                -- Fallback: direct bag equip if macro API is unavailable
+                local bag, slot = HasItemInBags(EVERGROWTH_NAME)
+                if bag and slot then UseContainerItem(bag, slot) end
+            end
+        end
+
+        lastRelicName = currentName
+    else
+        -- keep state fresh when disabled
+        lastRelicName = GetEquippedRelicName()
+        pendingEvergrowthEquipAt = nil
+    end
+end)
+
+-- =====================
+-- Slash Commands
 -- =====================
 SLASH_IDOLSWAP1 = "/idolswap"
 SlashCmdList["IDOLSWAP"] = function()
@@ -322,5 +387,18 @@ SlashCmdList["IDOLSWAP"] = function()
         DEFAULT_CHAT_FRAME:AddMessage("IdolSwap ENABLED", 0, 1, 0)
     else
         DEFAULT_CHAT_FRAME:AddMessage("IdolSwap DISABLED", 1, 0, 0)
+    end
+end
+
+SLASH_IDOLEVER1 = "/idolever"
+SlashCmdList["IDOLEVER"] = function()
+    IdolEvergrowthMacroEnabled = not IdolEvergrowthMacroEnabled
+    if IdolEvergrowthMacroEnabled then
+        DEFAULT_CHAT_FRAME:AddMessage("IdolSwap Evergrowth Macro Mode: |cff00ff00ENABLED|r (snap-back in 0.2s after leaving Evergrowth)")
+        -- Initialize last seen to current so we only trigger on next change
+        lastRelicName = GetEquippedRelicName()
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("IdolSwap Evergrowth Macro Mode: |cffff4444DISABLED|r")
+        pendingEvergrowthEquipAt = nil
     end
 end
