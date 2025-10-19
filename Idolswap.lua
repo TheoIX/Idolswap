@@ -160,14 +160,31 @@ IdolSwapFrame:SetScript("OnEvent", function(_, event)
 end)
 
 -- =====================
--- Spell Readiness (1.12-safe)
+-- Rank-aware spell parsing
 -- =====================
+-- Split a spec like "Moonfire(Rank 2)" → base="Moonfire", reqRank="Rank 2"
+-- Tolerant of spaces and case ("rank", "RANK") and extra whitespace.
+local function SplitNameAndRank(spellSpec)
+    if not spellSpec then return nil, nil end
+    local base, rnum = string.match(spellSpec, "^(.-)%s*%(%s*[Rr][Aa][Nn][Kk]%s*(%d+)%s*%)%s*$")
+    if base then
+        -- Trim trailing space from base and normalize rank capitalization/spacing
+        return (string.gsub(base, "%s+$", "")), ("Rank " .. rnum)
+    end
+    return spellSpec, nil
+end
+
+-- =====================
+-- Spell Readiness (1.12-safe, rank-aware)
+-- =====================
+-- Accepts: "Name" or "Name(Rank X)". If a rank is specified, require that exact rank.
 -- Returns: ready:boolean, start:number, duration:number
-local function IsSpellReady(spellName)
+local function IsSpellReady(spellSpec)
+    local base, reqRank = SplitNameAndRank(spellSpec)
     for i = 1, 300 do
         local name, rank = GetSpellName(i, BOOKTYPE_SPELL)
         if not name then break end
-        if spellName == name or (rank and (spellName == (name .. "(" .. rank .. ")"))) then
+        if name == base and (not reqRank or (rank and rank == reqRank)) then
             local start, duration, enabled = GetSpellCooldown(i, BOOKTYPE_SPELL)
             if not start or not duration then return false end
             if enabled == 0 then return false end
@@ -227,8 +244,8 @@ end
 local RELIC_SLOT = 18
 
 -- Per-spell throttle state (same behavior as LibramSwap; initially unused)
-local perSpellHasSwapped = {}   -- spellName -> true after first successful swap
-local perSpellLastSwap   = {}   -- spellName -> last swap time (after first)
+local perSpellHasSwapped = {}   -- spellName(base) -> true after first successful swap
+local perSpellLastSwap   = {}   -- spellName(base) -> last swap time (after first)
 
 -- Core equip with throttle policy
 local function EquipIdolForSpell(spellName, itemName)
@@ -299,12 +316,10 @@ end
 local Original_CastSpellByName = CastSpellByName
 function CastSpellByName(spellName, bookType)
     if IdolSwapEnabled then
-        local idol = ResolveIdolForSpell(spellName)
-        if idol then
-            local ready = IsSpellReady(spellName)
-            if ready then
-                EquipIdolForSpell(spellName, idol)
-            end
+        local base = SplitNameAndRank(spellName)    -- base only for idol map & throttles
+        local idol = ResolveIdolForSpell(base)
+        if idol and IsSpellReady(spellName) then    -- rank-aware readiness
+            EquipIdolForSpell(base, idol)
         end
     end
     return Original_CastSpellByName(spellName, bookType)
@@ -315,11 +330,11 @@ function CastSpell(spellIndex, bookType)
     if IdolSwapEnabled and bookType == BOOKTYPE_SPELL then
         local name, rank = GetSpellName(spellIndex, BOOKTYPE_SPELL)
         if name then
-            local idol = ResolveIdolForSpell(name)
+            local idol = ResolveIdolForSpell(name)  -- base name
             if idol then
-                local ready = IsSpellReady(name)
-                if ready then
-                    EquipIdolForSpell(name, idol)
+                local spec = (rank and rank ~= "") and (name .. "(" .. rank .. ")") or name
+                if IsSpellReady(spec) then          -- exact-rank readiness
+                    EquipIdolForSpell(name, idol)   -- throttle keyed by base name
                 end
             end
         end
