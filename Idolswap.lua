@@ -63,7 +63,13 @@ local SWAP_THROTTLE_GENERIC = 1.48
 -- Per-spell throttles were Paladin-specific in LibramSwap (e.g., Judgement/Consecration).
 -- For Druid we start with none; you can add entries here later if desired.
 local PER_SPELL_THROTTLE = {
-    -- ["Some Druid Spell"] = seconds,
+    -- Cat GCD abilities (1.0s)
+    ["Rake"]           = 0.9,
+    ["Rip"]            = 0.9,
+    ["Claw"]           = 0.9,
+    ["Shred"]          = 0.9,
+    ["Savage Bite"]    = 0.9,
+    ["Ferocious Bite"] = 0.9,
 }
 
 -- =====================
